@@ -18,15 +18,17 @@ function M.start(argv, stdin, opts, on_done)
     timeout = timeout_ms,
   }, function(obj)
     if handle.cancelled then return end
-    vim.schedule(function()
-      on_done({
-        code = obj.code or 0,
-        signal = obj.signal or 0,
-        stdout = clamp(obj.stdout or "", max_bytes),
-        stderr = clamp(obj.stderr or "", max_bytes),
-        timed_out = (obj.code or 0) == 124,
-      })
-    end)
+    vim.schedule(
+      function()
+        on_done({
+          code = obj.code or 0,
+          signal = obj.signal or 0,
+          stdout = clamp(obj.stdout or "", max_bytes),
+          stderr = clamp(obj.stderr or "", max_bytes),
+          timed_out = (obj.code or 0) == 124,
+        })
+      end
+    )
   end)
 
   function handle:cancel()

@@ -1,5 +1,15 @@
 local M = {}
 
+local VISUAL_CHAR = "v"
+local VISUAL_BLOCK = "\22"
+
+M.SOURCES = {
+  VISUAL = "visual",
+  SEARCH = "search",
+  CLIPBOARD = "clipboard",
+  AUTO = "auto",
+}
+
 function M.get_visual()
   local s = vim.fn.getpos("'<")
   local e = vim.fn.getpos("'>")
@@ -9,14 +19,14 @@ function M.get_visual()
   local mode = vim.fn.visualmode()
   local lines = vim.fn.getline(sl, el)
   if #lines == 0 then return nil end
-  if mode == "v" then
+  if mode == VISUAL_CHAR then
     if #lines == 1 then
       lines[1] = lines[1]:sub(sc, ec)
     else
       lines[1] = lines[1]:sub(sc)
       lines[#lines] = lines[#lines]:sub(1, ec)
     end
-  elseif mode == "\22" then
+  elseif mode == VISUAL_BLOCK then
     local lo = math.min(sc, ec)
     local hi = math.max(sc, ec)
     for i, l in ipairs(lines) do
@@ -28,7 +38,7 @@ function M.get_visual()
     start_line = sl,
     end_line = el,
     file = vim.api.nvim_buf_get_name(0),
-    source = "visual",
+    source = M.SOURCES.VISUAL,
   }
 end
 
@@ -46,7 +56,7 @@ function M.get_search()
     start_line = pos[1],
     end_line = pos[1],
     file = vim.api.nvim_buf_get_name(0),
-    source = "search",
+    source = M.SOURCES.SEARCH,
   }
 end
 
@@ -59,14 +69,14 @@ function M.get_clipboard()
     start_line = 0,
     end_line = 0,
     file = "",
-    source = "clipboard",
+    source = M.SOURCES.CLIPBOARD,
   }
 end
 
 function M.get(prefer)
-  if prefer == "visual" then return M.get_visual() end
-  if prefer == "search" then return M.get_search() end
-  if prefer == "clipboard" then return M.get_clipboard() end
+  if prefer == M.SOURCES.VISUAL then return M.get_visual() end
+  if prefer == M.SOURCES.SEARCH then return M.get_search() end
+  if prefer == M.SOURCES.CLIPBOARD then return M.get_clipboard() end
   return M.get_search() or M.get_visual() or M.get_clipboard()
 end
 

@@ -1,6 +1,12 @@
 local M = {}
 
-local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+local HL_BORDER = "FloatBorder"
+local HL_KEY = "Special"
+local HL_LABEL = "Comment"
+
+local SPINNER_FRAMES = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+local THINKING_TEXT = " thinking..."
+
 local thinking_ns = vim.api.nvim_create_namespace("ask-agent-thinking")
 
 local function as_list(k)
@@ -30,11 +36,11 @@ function M.start_thinking(sel)
     if not vim.api.nvim_buf_is_valid(handle.buf) then return end
     pcall(vim.api.nvim_buf_clear_namespace, handle.buf, thinking_ns, 0, -1)
     pcall(vim.api.nvim_buf_set_extmark, handle.buf, thinking_ns, handle.line, 0, {
-      virt_text = { { "  " .. spinner_frames[idx] .. " thinking...", "Comment" } },
+      virt_text = { { "  " .. SPINNER_FRAMES[idx] .. THINKING_TEXT, HL_LABEL } },
       virt_text_pos = "eol",
       hl_mode = "combine",
     })
-    idx = idx % #spinner_frames + 1
+    idx = idx % #SPINNER_FRAMES + 1
   end
 
   render()
@@ -97,29 +103,31 @@ local function position_for(w, h, float_opts, anchor, origin_win)
   if mode == "cursor" then
     return {
       relative = "cursor",
-      width = w, height = h, row = 1, col = 0,
-      border = float_opts.border, style = "minimal",
+      width = w,
+      height = h,
+      row = 1,
+      col = 0,
+      border = float_opts.border,
+      style = "minimal",
     }
   end
 
   local function centered()
     return {
       relative = "editor",
-      width = w, height = h,
+      width = w,
+      height = h,
       row = math.floor((rows - h) / 2),
       col = math.floor((cols - w) / 2),
-      border = float_opts.border, style = "minimal",
+      border = float_opts.border,
+      style = "minimal",
     }
   end
 
-  if mode ~= "selection" or not anchor or not anchor.start_line or anchor.start_line == 0 then
-    return centered()
-  end
+  if mode ~= "selection" or not anchor or not anchor.start_line or anchor.start_line == 0 then return centered() end
 
   local ok, pos = pcall(vim.fn.screenpos, origin_win, anchor.start_line, 1)
-  if not ok or not pos or pos.row == 0 then
-    return centered()
-  end
+  if not ok or not pos or pos.row == 0 then return centered() end
 
   local cmdline_rows = vim.o.cmdheight + 1
   local r = pos.row
@@ -134,10 +142,12 @@ local function position_for(w, h, float_opts, anchor, origin_win)
 
   return {
     relative = "editor",
-    width = w, height = h,
+    width = w,
+    height = h,
     row = row,
     col = math.floor((cols - w) / 2),
-    border = float_opts.border, style = "minimal",
+    border = float_opts.border,
+    style = "minimal",
   }
 end
 
@@ -148,20 +158,17 @@ end
 
 local function footer_chunks(callbacks, key_cfg)
   local chunks = {}
-  local close_hint = first_key(key_cfg.close) or "q"
-  table.insert(chunks, { " ", "FloatBorder" })
-  table.insert(chunks, { close_hint, "Special" })
-  table.insert(chunks, { " close ", "Comment" })
-  if callbacks and callbacks.on_follow_up and first_key(key_cfg.follow_up) then
-    table.insert(chunks, { " ", "FloatBorder" })
-    table.insert(chunks, { first_key(key_cfg.follow_up), "Special" })
-    table.insert(chunks, { " follow-up ", "Comment" })
+  local function add(key, label)
+    table.insert(chunks, { " ", HL_BORDER })
+    table.insert(chunks, { key, HL_KEY })
+    table.insert(chunks, { label, HL_LABEL })
   end
-  if callbacks and callbacks.on_prev and callbacks.on_next
-     and first_key(key_cfg.prev) and first_key(key_cfg.next) then
-    table.insert(chunks, { " ", "FloatBorder" })
-    table.insert(chunks, { first_key(key_cfg.prev) .. "/" .. first_key(key_cfg.next), "Special" })
-    table.insert(chunks, { " history ", "Comment" })
+  add(first_key(key_cfg.close) or "q", " close ")
+  if callbacks and callbacks.on_follow_up and first_key(key_cfg.follow_up) then
+    add(first_key(key_cfg.follow_up), " follow-up ")
+  end
+  if callbacks and callbacks.on_prev and callbacks.on_next and first_key(key_cfg.prev) and first_key(key_cfg.next) then
+    add(first_key(key_cfg.prev) .. "/" .. first_key(key_cfg.next), " history ")
   end
   return chunks
 end
@@ -202,7 +209,9 @@ local function open_float(content, float_opts, anchor, callbacks)
   end
 
   local function wrap(cb)
-    return function() vim.schedule(function() pcall(cb) end) end
+    return function()
+      vim.schedule(function() pcall(cb) end)
+    end
   end
 
   if callbacks and callbacks.on_follow_up then
@@ -254,9 +263,7 @@ end
 
 function M.close(handle)
   if not handle then return end
-  if handle.win and vim.api.nvim_win_is_valid(handle.win) then
-    pcall(vim.api.nvim_win_close, handle.win, true)
-  end
+  if handle.win and vim.api.nvim_win_is_valid(handle.win) then pcall(vim.api.nvim_win_close, handle.win, true) end
   if handle.buf and vim.api.nvim_buf_is_valid(handle.buf) then
     pcall(vim.api.nvim_buf_delete, handle.buf, { force = true })
   end

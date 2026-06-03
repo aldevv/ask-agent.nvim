@@ -2,6 +2,20 @@ local M = {}
 
 local config = require("ask-agent.config")
 local notify = require("ask-agent.notify")
+local selection = require("ask-agent.selection")
+local SOURCES = selection.SOURCES
+
+local PROMPT = {
+  file_header = "The user has selected the following text from the file at:\n%s\n(lines %d-%d)\n",
+  sel_open = "--- Selection start ---",
+  sel_close = "--- Selection end ---",
+  history_header = "Earlier in this conversation:",
+  q_prefix = "Q: ",
+  a_prefix = "A: ",
+  question_prefix = "Question: ",
+  followup_prefix = "Follow-up Q: ",
+  entry_fmt = "> %s\n\n%s",
+}
 
 local _initialized = false
 local _state = { handle = nil, job = nil, thinking = nil, session = nil }
@@ -44,7 +58,7 @@ end
 
 local function render_entry(question, answer)
   if not question or question == "" then return answer end
-  return string.format("> %s\n\n%s", question, answer or "")
+  return string.format(PROMPT.entry_fmt, question, answer or "")
 end
 
 local function navigate(delta)
@@ -62,24 +76,20 @@ end
 local function build_prompt(sel, question, history, system_prompt)
   local parts = {}
   if sel.file and sel.file ~= "" then
-    table.insert(parts, string.format(
-      "The user has selected the following text from the file at:\n%s\n(lines %d-%d)\n",
-      sel.file, sel.start_line, sel.end_line))
+    table.insert(parts, string.format(PROMPT.file_header, sel.file, sel.start_line, sel.end_line))
   end
-  if system_prompt and system_prompt ~= "" then
-    table.insert(parts, system_prompt .. "\n")
-  end
-  table.insert(parts, "--- Selection start ---\n" .. sel.text .. "\n--- Selection end ---\n")
+  if system_prompt and system_prompt ~= "" then table.insert(parts, system_prompt .. "\n") end
+  table.insert(parts, PROMPT.sel_open .. "\n" .. sel.text .. "\n" .. PROMPT.sel_close .. "\n")
 
   if history and #history > 0 then
-    table.insert(parts, "Earlier in this conversation:")
+    table.insert(parts, PROMPT.history_header)
     for _, turn in ipairs(history) do
-      table.insert(parts, "Q: " .. turn.question)
-      table.insert(parts, "A: " .. turn.answer)
+      table.insert(parts, PROMPT.q_prefix .. turn.question)
+      table.insert(parts, PROMPT.a_prefix .. turn.answer)
     end
-    table.insert(parts, "Follow-up Q: " .. question)
+    table.insert(parts, PROMPT.followup_prefix .. question)
   else
-    table.insert(parts, "Question: " .. question)
+    table.insert(parts, PROMPT.question_prefix .. question)
   end
 
   return table.concat(parts, "\n")
@@ -120,9 +130,7 @@ function run(sel, question)
 
   _state.thinking = ui.start_thinking(sel)
 
-  if not _state.session then
-    _state.session = { sel = sel, history = {} }
-  end
+  if not _state.session then _state.session = { sel = sel, history = {} } end
 
   local payload = build_prompt(sel, question, _state.session.history, opts.system_prompt)
   local callbacks = make_callbacks(sel)
@@ -159,24 +167,29 @@ function M.setup(user_opts)
   local opts = config.opts
 
   if opts.command_name and opts.command_name ~= "" then
-    vim.api.nvim_create_user_command(opts.command_name, function(ev)
-      M.ask(ev.range > 0 and "visual" or "auto")
-    end, { range = true, desc = "Ask the configured agent about the selection / search match" })
+    vim.api.nvim_create_user_command(
+      opts.command_name,
+      function(ev) M.ask(ev.range > 0 and SOURCES.VISUAL or SOURCES.AUTO) end,
+      { range = true, desc = "Ask the configured agent about the selection / search match" }
+    )
   end
 
   if opts.keymap then
     vim.keymap.set("x", opts.keymap, function()
       vim.cmd("noautocmd normal! \27")
-      M.ask("visual")
+      M.ask(SOURCES.VISUAL)
     end, { desc = "ask-agent: ask about selection", silent = true })
-    vim.keymap.set("n", opts.keymap, function()
-      M.ask("auto")
-    end, { desc = "ask-agent: ask about search match", silent = true })
+    vim.keymap.set(
+      "n",
+      opts.keymap,
+      function() M.ask(SOURCES.AUTO) end,
+      { desc = "ask-agent: ask about search match", silent = true }
+    )
   end
 end
 
 function M.ask(source)
-  local sel = require("ask-agent.selection").get(source or "auto")
+  local sel = selection.get(source or SOURCES.AUTO)
   if not sel or sel.text == "" then
     notify.warn("no selection or active search")
     return
@@ -189,8 +202,6 @@ function M.ask(source)
   end)
 end
 
-function M.close()
-  reset_all()
-end
+function M.close() reset_all() end
 
 return M
